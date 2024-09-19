@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import win32print
 import win32ui
+from dbr import *
+import time
 
 ''' Pro
 1. Get IP of connected phone
@@ -91,9 +93,59 @@ def capture_photo(ip=None):
     return img
 
 def scan_barcode(filename):
-    from test import read
-    data = read()
-    print(data)
+    data = {}
+    BarcodeReader.init_license(
+        't0068lQAAAJjRSR7zR0cWZB2EpQhYsioGSFbQAlGV5iUjFQ9VBxh8QTU02FpSwicmdcuAnQTAfS5QWAEOBGCP5kdYv2cM6HA=;t0068lQAAADk5uQYPOxgZPZTg3Q/8w9Fw08L+K5ptt41B2WijIOMUleSGJTj5Alch7age51koH2YKKoC66tYhDba+d0336E0=')
+    dbr_reader = BarcodeReader()
+    filename = "captured_photo.jpg"
+    img = cv2.imread(filename)
+    try:
+        start = time.time()
+        dbr_results = dbr_reader.decode_file(filename)
+        elapsed_time = time.time() - start
+
+        if dbr_results != None:
+            for text_result in dbr_results:
+                # print(textResult["BarcodeFormatString"])
+                if debug:
+                    print('Dynamsoft Barcode Reader: {}. Elapsed time: {}ms'.format(
+                        text_result.barcode_text, int(elapsed_time * 1000)))
+                data = text_result.barcode_text
+                points = text_result.localization_result.localization_points
+                cv2.drawContours(
+                    img, [np.intp([points[0], points[1], points[2], points[3]])], 0, (0, 255, 0), 2)
+                break
+            # cv2.imshow('DBR', img)
+            return data
+        else:
+            print("DBR failed to decode {}".format(filename))
+    except Exception as err:
+        print("DBR failed to decode {}".format(filename))
+
+    return None
+
+def parse_text_to_dict(text):
+    import re
+    """Parses the given text into a dictionary.
+
+    Args:
+        text: The input text string.
+
+    Returns:
+        A dictionary containing the parsed key-value pairs.
+    """
+
+    result = {}
+    lines = text.splitlines()
+
+    for line in lines:
+        key_value = line.split(":")
+        if len(key_value) == 2:
+            key = key_value[0].strip()
+            value = key_value[1].strip()
+            result[key] = value
+
+    return result
 
 def list_printers():
 
@@ -171,10 +223,14 @@ if __name__ == "__main__":
     # printer_name = list_printers()
     # print(printer_name)
     
-    # Capture photo and get the captured image
+    # 3 Capture photo and get the captured image
     captured_image = capture_photo(ip_address)
     scan_barcode("captured_photo.jpg")
 
+    #  4. Scan barcode get resul
+    scan_result_string = scan_barcode("captured_photo")
+    scan_result_dict = parse_text_to_dict(scan_result_string)
+    print(scan_result_dict['E-Stamp Code'])
     # Process the captured image (if needed)
     # ...
 
