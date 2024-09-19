@@ -14,7 +14,7 @@ import win32ui
 7. Get value from excel and print in stamp
 '''
 
-debug=False
+debug=True
 def get_device_ip():
     """Gets the IP address of the connected device using ADB."""
 
@@ -26,7 +26,7 @@ def get_device_ip():
 
         # Parse the output to extract the IP address
         for line in output.splitlines():
-            if "wlan0" in line or "ccmni2" in line:
+            if "wlan0" in line:
                 # Find the next line containing "inet addr"
                 for next_line in output.splitlines()[output.splitlines().index(line) + 1:]:
                     if "inet addr:" in next_line or "ccmni2" in next_line:
@@ -89,6 +89,11 @@ def capture_photo(ip=None):
     print(f"Photo saved as {filename}")
 
     return img
+
+def scan_barcode(filename):
+    from test import read
+    data = read()
+    print(data)
 
 def list_printers():
 
@@ -163,18 +168,19 @@ if __name__ == "__main__":
         print("Error getting device IP")
 
     #2 Get printer List
-    printer_name = list_printers()
-    print(printer_name)
+    # printer_name = list_printers()
+    # print(printer_name)
     
     # Capture photo and get the captured image
     captured_image = capture_photo(ip_address)
+    scan_barcode("captured_photo.jpg")
 
     # Process the captured image (if needed)
     # ...
 
     # Do something with the captured image
     # print(captured_image.shape)  # Print the image dimensions
-    print_stamp(printer_name, "Hello", 0,0)
+    # print_stamp(printer_name, "Hello", 0,0)
 
 
     # Printer print
