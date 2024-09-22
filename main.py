@@ -6,6 +6,10 @@ import win32print
 import win32ui
 from dbr import *
 import time
+import pandas as pd
+from win32con import DM_ORIENTATION, DMORIENT_LANDSCAPE, SRCCOPY, BLACK_PEN, TRANSPARENT, WHITE_BRUSH
+from ctypes import windll, Structure, c_float, byref
+from ctypes.wintypes import LONG
 
 ''' Pro
 1. Get IP of connected phone
@@ -16,18 +20,20 @@ import time
 7. Get value from excel and print in stamp
 '''
 
-debug=True
+debug=False
 def get_device_ip():
     """Gets the IP address of the connected device using ADB."""
 
     try:
         result = subprocess.run(["adb.exe", "shell", "ifconfig"], capture_output=True)
+        print(result)
         output = result.stdout.decode()
         if debug:
             print(f"\n\nadb output: {output} \n\n")
 
         # Parse the output to extract the IP address
         for line in output.splitlines():
+            print(line)
             if "wlan0" in line:
                 # Find the next line containing "inet addr"
                 for next_line in output.splitlines()[output.splitlines().index(line) + 1:]:
@@ -168,39 +174,85 @@ def list_printers():
         print(f"Error listing printers: {e}")
         return None
 
-def print_stamp(printer_name, text, x, y):
+class XFORM(Structure):
+    _fields_ = [("eM11", c_float),
+                ("eM12", c_float),
+                ("eM21", c_float),
+                ("eM22", c_float),
+                ("eDx", c_float),
+                ("eDy", c_float)]
+
+def rotate_dc_180(hDC, x_center, y_center):
+    """Apply 180-degree rotation using transformation matrix."""
+    # Set the graphics mode to advanced to support world transformations
+    windll.gdi32.SetGraphicsMode(hDC.GetSafeHdc(), 2)  # 2 = GM_ADVANCED
+    
+    # Create a 180-degree rotation matrix (negative scale on both axes)
+    xform = XFORM()
+    xform.eM11 = -1.0  # Mirror horizontally
+    xform.eM12 = 0.0
+    xform.eM21 = 0.0
+    xform.eM22 = -1.0  # Mirror vertically
+    xform.eDx = 2 * x_center  # Move back to original position
+    xform.eDy = 2 * y_center
+
+    # Apply the transformation to the device context
+    windll.gdi32.SetWorldTransform(hDC.GetSafeHdc(), byref(xform))
+
+def print_stamp(printer_name, text, x, y, rotate=False):
     try:
+        # Get the printer handle
+        printer_handle = win32print.OpenPrinter(printer_name)
+
+        # Initialize the printer device context
         hDC = win32ui.CreateDC()
-        hDC.StartDoc(text)
+        hDC.CreatePrinterDC(printer_name)
+
+        # Start the document and the printing page
+        hDC.StartDoc('Print Document')
         hDC.StartPage()
 
-        # Set the font and text color
-        hDC.SelectObject(win32ui.CreateFont({
-            'name': 'Arial',
-            'size': 12,
-            'weight': win32ui.BOLD,
-            'color': win32ui.RGB(0, 0, 0)  # Black
-        }))
+        # Set text color (RGB)
+        hDC.SetTextColor(0x000000)  # Black color in RGB (0,0,0)
 
-        # Assuming A4 paper dimensions in pixels (adjust if needed)
-        a4_width_pixels = 2480
-        a4_height_pixels = 3508
+        # Apply 180-degree rotation if specified
+        if rotate:
+            # Calculate the center of the text (based on where text will be printed)
+            text_width, text_height = hDC.GetTextExtent(text)
+            x_center = x + text_width // 2
+            y_center = y + text_height // 2
+            rotate_dc_180(hDC, x_center, y_center)
 
-        # Calculate the desired coordinates based on A4 paper dimensions
-        desired_x = a4_width_pixels // 2  # Center horizontally
-        desired_y = a4_height_pixels - (a4_height_pixels * 0.25)  # 1/4 from the bottom
+        # Print the text at the specified position
+        hDC.TextOut(x, y, text)
 
-        # Adjust x and y coordinates based on text size and margins
-        text_width, text_height = hDC.GetTextExtent(text)
-        desired_x -= text_width // 2  # Center horizontally
-        desired_y -= text_height // 2  # Center vertically
-
-        hDC.TextOut(desired_x, desired_y, text)
-
+        # End the page and document
         hDC.EndPage()
         hDC.EndDoc()
+
+        # Close the printer handle
+        win32print.ClosePrinter(printer_handle)
+
     except Exception as e:
         print(f"Error printing: {e}")
+
+def load_stamp_data(csv_file_path):
+    """Loads the CSV data into a pandas DataFrame with 'stamp_code' as string."""
+    return pd.read_csv(csv_file_path, dtype={'stamp_code': str})
+
+def get_stamp_value(stamp_code, df):
+    """Fetches the value for a given stamp_code."""
+    print(df)
+    # Clean up stamp_code and DataFrame values to remove extra quotes and spaces
+    df['stamp_code'] = df['stamp_code'].astype(str).str.strip().str.replace('"', '')
+    stamp_code = stamp_code.strip().replace('"', '')
+    
+    # Fetch the row with the matching stamp code
+    row = df[df['stamp_code'] == stamp_code]
+    print(f"row {row}")
+    if not row.empty:
+        return row['value'].values[0]
+    return None
 
 if __name__ == "__main__":
     ''' Pro
@@ -220,8 +272,8 @@ if __name__ == "__main__":
         print("Error getting device IP")
 
     #2 Get printer List
-    # printer_name = list_printers()
-    # print(printer_name)
+    printer_name = list_printers()
+    print(printer_name)
     
     # 3 Capture photo and get the captured image
     captured_image = capture_photo(ip_address)
@@ -230,13 +282,27 @@ if __name__ == "__main__":
     #  4. Scan barcode get resul
     scan_result_string = scan_barcode("captured_photo")
     scan_result_dict = parse_text_to_dict(scan_result_string)
-    print(scan_result_dict['E-Stamp Code'])
-    # Process the captured image (if needed)
-    # ...
+    stamp_code = scan_result_dict['E-Stamp Code']
+    print(f"stamp Code: {stamp_code}")
+
+
+    stamp_df = load_stamp_data('data.csv')
+    value = get_stamp_value(stamp_code, stamp_df)
+    print(f"Value: {value}")
 
     # Do something with the captured image
-    # print(captured_image.shape)  # Print the image dimensions
-    # print_stamp(printer_name, "Hello", 0,0)
+    print_stamp(printer_name, stamp_code, 1500, 200)
+
+
+
+
+
+
+
+
+
+
+    
 
 
     # Printer print
