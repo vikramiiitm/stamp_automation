@@ -317,7 +317,7 @@ if __name__ == "__main__":
     print(printer_name)
     
     # 3 Capture photo and get the captured image
-    # captured_image = capture_photo(ip_address)
+    captured_image = capture_photo(ip_address)
     # scan_barcode("captured_photo.jpg")
 
     #  4. Scan barcode get resul
