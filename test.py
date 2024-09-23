@@ -1,66 +1,42 @@
-from dbr import *
-import cv2
-import numpy as np
-import time
+import pytesseract
+from PIL import Image
+pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
-BarcodeReader.init_license(
-    't0068lQAAAJjRSR7zR0cWZB2EpQhYsioGSFbQAlGV5iUjFQ9VBxh8QTU02FpSwicmdcuAnQTAfS5QWAEOBGCP5kdYv2cM6HA=;t0068lQAAADk5uQYPOxgZPZTg3Q/8w9Fw08L+K5ptt41B2WijIOMUleSGJTj5Alch7age51koH2YKKoC66tYhDba+d0336E0=')
-dbr_reader = BarcodeReader()
-
-def dbr_decode(dbr_reader):
-    data = {}
-    filename = "captured_photo.jpg"
-    img = cv2.imread(filename)
-    try:
-        start = time.time()
-        dbr_results = dbr_reader.decode_file(filename)
-        elapsed_time = time.time() - start
-
-        if dbr_results != None:
-            for text_result in dbr_results:
-                # print(textResult["BarcodeFormatString"])
-                # print('Dynamsoft Barcode Reader: {}. Elapsed time: {}ms'.format(
-                #     text_result.barcode_text, int(elapsed_time * 1000)))
-                # print(dbr_results.)
-                data = text_result.barcode_text
-                points = text_result.localization_result.localization_points
-                cv2.drawContours(
-                    img, [np.intp([points[0], points[1], points[2], points[3]])], 0, (0, 255, 0), 2)
-                break
-            cv2.imshow('DBR', img)
-            return data
-        
-        else:
-            print("DBR failed to decode {}".format(filename))
-    except Exception as err:
-        print("DBR failed to decode {}".format(filename))
-
-    return None
-
-barcode_text = dbr_decode(dbr_reader)
-
-def parse_text_to_dict(text):
-    import re
-    """Parses the given text into a dictionary.
+def ocr_image(image_path):
+    """Performs OCR on the specified image and returns the recognized text.
 
     Args:
-        text: The input text string.
+        image_path (str): The path to the image file.
 
     Returns:
-        A dictionary containing the parsed key-value pairs.
+        str: The recognized text from the image.
     """
 
-    result = {}
-    lines = text.splitlines()
+    try:
+        image = Image.open("stamp.png")
+        text = pytesseract.image_to_string(image)
+        return text
 
-    for line in lines:
-        key_value = line.split(":")
-        if len(key_value) == 2:
-            key = key_value[0].strip()
-            value = key_value[1].strip()
-            result[key] = value
+    except Exception as e:
+        print(f"Error performing OCR: {e}")
+        return None
+recognized_text = ocr_image("captured_photo.jpg")
+print(recognized_text)
+import re
 
-    return result
+def extract_e_stamp_value(text):
 
-parsed_dict = parse_text_to_dict(barcode_text)
-print(parsed_dict)
+  pattern = r"e-Stamp\s+(\S+)"  # Regular expression pattern
+  match = re.search(pattern, text)
+
+  if match:
+    return match.group(1)
+  else:
+    print("Unable to find the value after 'e-Stamp'.")
+    return None
+
+if recognized_text:
+    output = extract_e_stamp_value(recognized_text)
+    print(output.replace('.', ''))
+else:
+    print("OCR failed.")
