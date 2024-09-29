@@ -130,11 +130,10 @@ import re
 
 def extract_e_stamp_value(text):
 
-  pattern = r"e-Stamp\s+(\S+)"  # Regular expression pattern
-  match = re.search(pattern, text)
+  certificate_number = re.search(r"IN-[A-Z0-9]+", text)
 
-  if match:
-    return match.group(1)
+  if certificate_number:
+    return certificate_number
   else:
     print("Unable to find the value after 'e-Stamp'.")
     return None
@@ -240,7 +239,7 @@ def rotate_dc_180(hDC, x_center, y_center):
     # Apply the transformation to the device context
     windll.gdi32.SetWorldTransform(hDC.GetSafeHdc(), byref(xform))
 
-def print_stamp(printer_name, text, x, y, rotate=False):
+def print_stamp(printer_name, text, x, y, rotate=True):
     try:
         # Get the printer handle
         printer_handle = win32print.OpenPrinter(printer_name)
