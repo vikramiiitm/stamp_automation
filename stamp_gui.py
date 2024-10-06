@@ -94,7 +94,8 @@ def create_ui():
     style.configure("Treeview", background="white", fieldbackground="white")
     style.configure("Treeview.Heading", background="lightblue")
     style.map("Treeview", foreground=[('selected', 'black'), ('active', 'blue')], background=[('selected', 'lightblue'), ('active', 'lightblue')])
-    style.configure("Oddrow.Treeview", background="lightgrey")
+    style.configure("evenrow", background="black", foreground="white")  # Set even row style
+    style.configure("oddrow", background="gray", foreground="black")  # Set odd row style
 
     # Create Start, Stop, and Exit buttons
     start_button = tk.Button(root, text="Start", command=start_runner)
@@ -107,6 +108,14 @@ def create_ui():
     # Create a Refresh button
     refresh_button = tk.Button(root, text="Refresh", command=lambda: refresh_data(tree, csv_file, root))
     refresh_button.grid(row=1, column=3, sticky="e")
+
+    # Create a divider above the copyright label
+    divider = ttk.Separator(root, orient=tk.HORIZONTAL)
+    divider.grid(row=2, column=0, columnspan=4, sticky="ew")
+
+    # Create a copyright label
+    copyright_label = tk.Label(root, text="© 2023 NoblesseTech")
+    copyright_label.grid(row=3, column=0, columnspan=4, sticky="nsew")  # Place at the bottom, span all columns
 
     # Insert initial data into the Treeview
     update_treeview(tree, data)
