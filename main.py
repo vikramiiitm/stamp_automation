@@ -10,6 +10,8 @@ import pandas as pd
 from win32con import DM_ORIENTATION, DMORIENT_LANDSCAPE, SRCCOPY, BLACK_PEN, TRANSPARENT, WHITE_BRUSH
 from ctypes import windll, Structure, c_float, byref
 from ctypes.wintypes import LONG
+import re
+import base64
 
 import pytesseract
 from PIL import Image
@@ -20,12 +22,21 @@ pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesse
 1. Get IP of connected phone
 2. Check Available Printer
 3. Capture Photo stamp
-4. Scan the barcode, get ref number
+4. Scan the barcode | OCR Image
+5. Use OCR text or GPT
 6. Search against ref number in excel
 7. Get value from excel and print in stamp
 '''
 
 debug=False
+
+import pytesseract
+from PIL import Image
+pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+
+# OpenAI API Key
+api_key = "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"
+
 def get_device_ip():
     """Gets the IP address of the connected device using ADB."""
 
@@ -103,41 +114,140 @@ def capture_photo(ip=None):
 
     return img
 
-import pytesseract
-from PIL import Image
-pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+def get_promt(ocr):
+    prompt = f"""
+    The following text is extracted from a traditional stamp paper. The certificate number may or may not be explicitly labeled with terms like:
+
+    Here is the certificate format for different state.
+
+    West Bengal (certificate number length: 10): 95AB ------
+
+    However, the certificate number is usually a sequence of digits or a combination of letters and digits, often located prominently on the document. In some cases, there may be no label, and the number could appear on its own.
+
+    Please examine the following extracted text and identify the sequence that most likely represents the certificate number, even if no label is present. It could be a long number (8–12 digits) or a combination of digits and letters.
+
+    Here is the extracted text:
+
+    '{ocr}'
+
+    Return Only the certificate number, don't use sentence for answering, also remove space in between certificate number. 
+    """
+    return prompt
 
 def ocr_image(image_path):
-    """Performs OCR on the specified image and returns the recognized text.
-
-    Args:
-        image_path (str): The path to the image file.
-
-    Returns:
-        str: The recognized text from the image.
-    """
-
     try:
         image = Image.open(image_path)
         text = pytesseract.image_to_string(image)
-        return text
+        if len(text) == 0:
+            return None
+        else: return text
 
     except Exception as e:
         print(f"Error performing OCR: {e}")
         return None
 
-import re
+def encode_image(image_path):
+  with open(image_path, "rb") as image_file:
+    return base64.b64encode(image_file.read()).decode('utf-8')
 
-def extract_e_stamp_value(text):
+def gptvision(image_path):
+    # Getting the base64 string
+    base64_image = encode_image(image_path)
+    ocr_text = ocr_image(image_path)
 
-  certificate_number = re.search(r"IN-[A-Z0-9]+", text)
+    headers = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {api_key}"
+    }
 
-  if certificate_number:
-    return certificate_number
-  else:
-    print("Unable to find the value after 'e-Stamp'.")
+    payload = {
+    "model": "gpt-4o-mini",
+    "messages": [
+        {
+        "role": "user",
+        "content": [
+            {
+            "type": "text",
+            # "text": "Tell only certificate number from INdian stamp paper. nothing else."
+            "text": get_promt(ocr_text)
+            },
+            {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}"
+            }
+            }
+        ]
+        }
+    ],
+    "max_tokens": 300
+    }
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    if response.json():
+        return response.json()['choices'][0]['message']['content']
+def gpt_text(image_path):
+    ocr_text = ocr_image(image_path)
+    if ocr_text:
+    # Preparing the request headers
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        print(ocr_text)
+        # Prompt to extract the certificate number
+        # prompt = f"Tell only value of certificate no. from provided text extracted from the traditional stamp paper Here is the text: {ocr_text}. Certificate number is mix of alphabets and numbers."
+        prompt = get_promt(ocr_text)
+        # Payload for the GPT-3.5 API
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 50
+        }
+
+        # Sending the API request to OpenAI
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+
+        # Printing the response from GPT-3.5
+        print(response.json())
+        return response.json()
+    else:
+        print("OCR failed. No text extracted from the image.")
+
+# check if "certificate" text present in the ocr text
+# Case 1
+def check_certificate_present(text):
+    """
+    Check if the oct text contains the word "certificate".
+    """
+    return "certificate" in text.lower()
+# Case 2
+def check_bengal_format(text):
+    return "bengal" in text.lower()
+def extract_certificate_bengal(text):
+    import re
+    pattern = r"95AB [0-9]+"
+    # Search for the certificate number in the text
+    certificate_number = re.search(pattern, text)
+    return certificate_number.group(0) if certificate_number else None
+
+def extract_e_stamp_value(ocr_text):
+    import re
+    # print(ocr_text)
+    certificate_number = re.search(r"IN-[A-Z0-9]+", ocr_text)
+
+    if certificate_number:
+        return certificate_number.group(0)
+    else:
+        print("Unable to find the value after 'e-Stamp'.")
     return None
 
+# Using the services DBR API to scan the barcode
+# It gives text results, not reliable as it contains encoded dada sometimes
 def scan_barcode(filename):
     data = {}
     BarcodeReader.init_license(
@@ -170,6 +280,7 @@ def scan_barcode(filename):
 
     return None
 
+# 
 def parse_text_to_dict(text):
     import re
     """Parses the given text into a dictionary.
@@ -280,19 +391,94 @@ def load_stamp_data(csv_file_path):
     """Loads the CSV data into a pandas DataFrame with 'stamp_code' as string."""
     return pd.read_csv(csv_file_path, dtype={'stamp_code': str})
 
-def get_stamp_value(stamp_code, df):
+def get_stamp_value_excel(stamp_code, df):
     """Fetches the value for a given stamp_code."""
-    print(df)
+    # print(df)
     # Clean up stamp_code and DataFrame values to remove extra quotes and spaces
     df['stamp_code'] = df['stamp_code'].astype(str).str.strip().str.replace('"', '')
     stamp_code = stamp_code.strip().replace('"', '')
     
     # Fetch the row with the matching stamp code
     row = df[df['stamp_code'] == stamp_code]
-    print(f"row {row}")
+    # print(f"row {row}")
     if not row.empty:
         return row['value'].values[0]
     return None
+
+def start_gui():
+    subprocess.run(['python', 'stamp_gui.py'])
+def runner():
+    # folder_path = "stamp_paper"  # Replace with your actual folder path. Make sure the folder exists.
+    # file_names = [filename for filename in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, filename))]
+    # for filename in file_names:
+    #     filename = filename.split("/")[-1]
+    #     print(f"Processing {filename}")
+    #     filename = f'stamp_paper/{filename}'
+    # Loop through all the files in the folder
+    
+    # 1 Get IP of connected device
+    '''ip_address = get_device_ip()
+    if ip_address:
+        print("Device IP address:", ip_address)
+    else:
+        print("Error getting device IP. Exiting...")
+        exit(0)
+    #2 Get printer List
+    printer_name = list_printers()
+    print(printer_name)'''
+
+    # 3 Capture photo and get the captured image
+    '''captured_image = capture_photo(ip_address)'''
+
+    ocr_text = ocr_image('stamp_paper/E-Stamp.pdf-image-007.jpg')
+    certificate_number = None
+    print(ocr_text)
+    if ocr_text:
+        # print(ocr_text)
+        #  Case 1: If the text contains "certificate", i.e. it's a e-stamp.
+        if check_certificate_present(ocr_text):
+            print(f"Format: E-Stamp Delhi")
+            certificate_number = extract_e_stamp_value(ocr_text)
+            print(f"certificate_number : {certificate_number}")
+        #  Case 2: If the text doesn't contain "certificate", i.e. it's not a e-stamp.
+        # Check If West Bengal stamp. 
+        elif check_bengal_format(ocr_text):
+            print(f"Format: Stamp West Bengal")
+            certificate_number = extract_certificate_bengal(ocr_text)
+            print(f"certificate_number : {certificate_number}")
+        else:
+            # try methods without state checks
+            certificate_number = extract_certificate_bengal(ocr_text)
+            print(f"certificate_number : {certificate_number}")
+    elif ocr_text is None:
+        print("OCR failed. No text extracted from the image. Using GPTVision")
+        # use gpt vision
+        certificate_number = gptvision('stamp_paper/E-Stamp.pdf-image-005.jpg')
+        print(f"certificate_number : {certificate_number}")
+
+        # Verify certificate number
+        # TODO: Add verification logic here.
+        # gpt_text()
+    else:
+        certificate_number = None
+
+    printer_name  = "test" # TODO: Remove this line once you have a valid printer name.
+    if certificate_number and printer_name:
+        stamp_df = load_stamp_data('data.csv')
+        value = get_stamp_value_excel(certificate_number.replace('.',''), stamp_df)
+        print(f"Value: {value}")
+
+        # Save the data in processed_data.csv
+        processed_data = pd.DataFrame({'certificate_number': certificate_number, 'value': value if value else 'None', 'status': True if value else False}, index={'index': [0]})
+        processed_data.to_csv('processed_data.csv', mode='a', index=False, header=False)
+
+        # Do something with the captured image
+        # print_stamp(printer_name, value, 1500, 200)
+    else:
+        print("No certificate/Printer found. Exiting...")
+        # print_stamp(printer_name, "", 1500, 200)
+
+   
 
 if __name__ == "__main__":
     ''' Pro
@@ -303,54 +489,18 @@ if __name__ == "__main__":
     6. Search against ref number in excel
     7. Get value from excel and print in stamp
     '''
+    # import subprocess
+    # from multiprocessing import Process
 
-    # 1
-    ip_address = get_device_ip()
-    if ip_address:
-        print("Device IP address:", ip_address)
-    else:
-        print("Error getting device IP")
+    # if __name__ == "__main__":
+    #     # Start the GUI in a separate process
+    #     gui_process = Process(target=start_gui)
+    #     gui_process.start()
 
-    #2 Get printer List
-    printer_name = list_printers()
-    print(printer_name)
+    #     # Run runner() 10 times in the main process
+    #     for i in range(10):
+    #         runner()
+
+    #     # Wait for the GUI process to finish (optional)
+    #     gui_process.join()
     
-    # 3 Capture photo and get the captured image
-    captured_image = capture_photo(ip_address)
-    # scan_barcode("captured_photo.jpg")
-
-    #  4. Scan barcode get resul
-    # scan_result_string = scan_barcode("captured_photo")
-    # scan_result_dict = parse_text_to_dict(scan_result_string)
-    # stamp_code = scan_result_dict['E-Stamp Code']
-    # print(f"stamp Code: {stamp_code}")
-
-    recognized_text = ocr_image("estamp.png")
-    print(recognized_text)
-
-    if recognized_text:
-        output = extract_e_stamp_value(recognized_text)
-        print(output.replace('.', ''))
-    else:
-        print("OCR failed.")
-
-    stamp_df = load_stamp_data('data.csv')
-    value = get_stamp_value(output.replace('.',''), stamp_df)
-    print(f"Value: {value}")
-
-    # Do something with the captured image
-    print_stamp(printer_name, value, 1500, 200)
-
-
-
-
-
-
-
-
-
-
-    
-
-
-    # Printer print

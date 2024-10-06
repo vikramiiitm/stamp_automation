@@ -2,7 +2,7 @@ import base64
 import requests
 
 # OpenAI API Key
-api_key = ""
+api_key = "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"
 
 
 import pytesseract
@@ -84,7 +84,12 @@ def gptvision(image_path):
     }
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     if response.json():
-        return response.json()['choices'][0]['message']['content']
+        # print(response.json())
+        try:
+            response = response.json()['choices'][0]['message']['content']
+        except:
+            response = None
+        return response
 def gpt_text(image_path):
     ocr_text = ocr_image(image_path)
     if ocr_text:
