@@ -468,7 +468,6 @@ def runner():
         else:
             certificate_number = None
 
-        # printer_name  = "test" # TODO: Remove this line once you have a valid printer name.
         if certificate_number and printer_name:
             stamp_df = load_stamp_data('data.csv')
             value = get_stamp_value_excel(certificate_number.replace('.',''), stamp_df)
@@ -479,7 +478,10 @@ def runner():
             processed_data.to_csv('processed_data.csv', mode='a', index=False, header=False)
 
             # Do something with the captured image
-            print_stamp(printer_name, value, 1500, 200)
+            if value:
+                print_stamp(printer_name, value, 1500, 200)
+            else:
+                print_stamp(printer_name, '', 1500, 200)
         else:
             print("No certificate/Printer found. Exiting...")
             stamp_df = load_stamp_data('data.csv')
