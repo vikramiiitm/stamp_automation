@@ -36,19 +36,20 @@ pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesse
 
 # OpenAI API Key
 api_key = ""
+
 def get_device_ip():
     """Gets the IP address of the connected device using ADB."""
 
     try:
         result = subprocess.run(["adb.exe", "shell", "ifconfig"], capture_output=True)
-        print(result)
+        # print(result)
         output = result.stdout.decode()
         if debug:
             print(f"\n\nadb output: {output} \n\n")
 
         # Parse the output to extract the IP address
         for line in output.splitlines():
-            print(line)
+            # print(line)
             if "wlan0" in line:
                 # Find the next line containing "inet addr"
                 for next_line in output.splitlines()[output.splitlines().index(line) + 1:]:
@@ -167,8 +168,8 @@ def gptvision(image_path):
         "content": [
             {
             "type": "text",
-            # "text": "Tell only certificate number from INdian stamp paper. nothing else."
-            "text": get_promt(ocr_text)
+            "text": "Tell only certificate number from Indian stamp paper. nothing else."
+            # "text": get_promt(ocr_text)
             },
             {
             "type": "image_url",
@@ -183,7 +184,9 @@ def gptvision(image_path):
     }
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     if response.json():
-        return response.json()['choices'][0]['message']['content']
+        print(response.json())
+        if response.json().get('choices'):
+            return response.json()['choices'][0]['message']['content']
 def gpt_text(image_path):
     ocr_text = ocr_image(image_path)
     if ocr_text:
@@ -192,7 +195,7 @@ def gpt_text(image_path):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
-        print(ocr_text)
+        # print(ocr_text)
         # Prompt to extract the certificate number
         # prompt = f"Tell only value of certificate no. from provided text extracted from the traditional stamp paper Here is the text: {ocr_text}. Certificate number is mix of alphabets and numbers."
         prompt = get_promt(ocr_text)
@@ -307,7 +310,8 @@ def list_printers():
 
     try:
         # List all printers with verbose information retrieval
-        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_CONNECTIONS | win32print.PRINTER_ENUM_LOCAL, None, 1)  # 2 for PRINTER_ENUM_FULL
+        printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_CONNECTIONS, None, 1)  # 2 for PRINTER_ENUM_FULL
+        # | win32print.PRINTER_ENUM_LOCAL,
         if debug:
             print(f"\n\n Printers Found: {printers} \n\n")
         for index, printer in enumerate(printers):
@@ -320,8 +324,8 @@ def list_printers():
             return printer_name
         else:
             return None
-    except win32print.WinError as e:
-        print(f"Error listing printers: {e}")
+    except:
+        print(f"Error listing printers")
         return None
 
 class XFORM(Structure):
@@ -407,99 +411,112 @@ def get_stamp_value_excel(stamp_code, df):
 def start_gui():
     subprocess.run(['python', 'stamp_gui.py'])
 def runner():
-    # folder_path = "stamp_paper"  # Replace with your actual folder path. Make sure the folder exists.
-    # file_names = [filename for filename in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, filename))]
-    # for filename in file_names:
-    #     filename = filename.split("/")[-1]
-    #     print(f"Processing {filename}")
-    #     filename = f'stamp_paper/{filename}'
-    # Loop through all the files in the folder
-    
-    # 1 Get IP of connected device
-    '''ip_address = get_device_ip()
-    if ip_address:
-        print("Device IP address:", ip_address)
-    else:
-        print("Error getting device IP. Exiting...")
-        exit(0)
-    #2 Get printer List
-    printer_name = list_printers()
-    print(printer_name)'''
-
-    # 3 Capture photo and get the captured image
-    '''captured_image = capture_photo(ip_address)'''
-
-    ocr_text = ocr_image('stamp_paper/E-Stamp.pdf-image-007.jpg')
-    certificate_number = None
-    print(ocr_text)
-    if ocr_text:
-        # print(ocr_text)
-        #  Case 1: If the text contains "certificate", i.e. it's a e-stamp.
-        if check_certificate_present(ocr_text):
-            print(f"Format: E-Stamp Delhi")
-            certificate_number = extract_e_stamp_value(ocr_text)
-            print(f"certificate_number : {certificate_number}")
-        #  Case 2: If the text doesn't contain "certificate", i.e. it's not a e-stamp.
-        # Check If West Bengal stamp. 
-        elif check_bengal_format(ocr_text):
-            print(f"Format: Stamp West Bengal")
-            certificate_number = extract_certificate_bengal(ocr_text)
-            print(f"certificate_number : {certificate_number}")
+    try:
+        # folder_path = "stamp_paper"  # Replace with your actual folder path. Make sure the folder exists.
+        # file_names = [filename for filename in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, filename))]
+        # for filename in file_names:
+        #     filename = filename.split("/")[-1]
+        #     print(f"Processing {filename}")
+        #     filename = f'stamp_paper/{filename}'
+        # Loop through all the files in the folder
+        
+        # 1 Get IP of connected device
+        ip_address = get_device_ip()
+        if ip_address:
+            print("Device IP address:", ip_address)
         else:
-            # try methods without state checks
-            certificate_number = extract_certificate_bengal(ocr_text)
-            print(f"certificate_number : {certificate_number}")
-    elif ocr_text is None:
-        print("OCR failed. No text extracted from the image. Using GPTVision")
-        # use gpt vision
-        certificate_number = gptvision('stamp_paper/E-Stamp.pdf-image-005.jpg')
-        print(f"certificate_number : {certificate_number}")
-
-        # Verify certificate number
-        # TODO: Add verification logic here.
-        # gpt_text()
-    else:
+            print("Error getting device IP. Exiting...")
+            exit(0)
+        #2 Get printer List
+        printer_name = list_printers()
+        if not printer_name:
+            print("No printer found. Exiting...")
+            # exit(0)
+        
+        # 3 Capture photo and get the captured image
+        captured_image = capture_photo(ip_address)
+        image_path = 'stamp_paper/E-Stamp.pdf-image-006.jpg'
+        ocr_text = ocr_image(image_path)
         certificate_number = None
+        # print(ocr_text)
+        if ocr_text:
+            # print(ocr_text)
+            #  Case 1: If the text contains "certificate", i.e. it's a e-stamp.
+            if check_certificate_present(ocr_text):
+                print(f"Format: E-Stamp Delhi")
+                certificate_number = extract_e_stamp_value(ocr_text)
+                print(f"certificate_number : {certificate_number}")
+            #  Case 2: If the text doesn't contain "certificate", i.e. it's not a e-stamp.
+            # Check If West Bengal stamp. 
+            elif check_bengal_format(ocr_text):
+                print(f"Format: Stamp West Bengal")
+                certificate_number = extract_certificate_bengal(ocr_text)
+                print(f"certificate_number : {certificate_number}")
+            else:
+                # try methods without state checks
+                certificate_number = extract_certificate_bengal(ocr_text)
+                print(f"certificate_number : {certificate_number}")
+        elif ocr_text is None:
+            print("OCR failed. No text extracted from the image. Using GPTVision")
+            # use gpt vision
+            certificate_number = gptvision(image_path)
+            print(f"certificate_number : {certificate_number}")
 
-    printer_name  = "test" # TODO: Remove this line once you have a valid printer name.
-    if certificate_number and printer_name:
-        stamp_df = load_stamp_data('data.csv')
-        value = get_stamp_value_excel(certificate_number.replace('.',''), stamp_df)
-        print(f"Value: {value}")
+            # Verify certificate number
+            # TODO: Add verification logic here.
+            # gpt_text()
+        else:
+            certificate_number = None
 
-        # Save the data in processed_data.csv
-        processed_data = pd.DataFrame({'certificate_number': certificate_number, 'value': value if value else 'None', 'status': True if value else False}, index={'index': [0]})
-        processed_data.to_csv('processed_data.csv', mode='a', index=False, header=False)
+        # printer_name  = "test" # TODO: Remove this line once you have a valid printer name.
+        if certificate_number and printer_name:
+            stamp_df = load_stamp_data('data.csv')
+            value = get_stamp_value_excel(certificate_number.replace('.',''), stamp_df)
+            print(f"Value: {value}")
 
-        # Do something with the captured image
-        print_stamp(printer_name, value, 1500, 200)
-    else:
-        print("No certificate/Printer found. Exiting...")
-        print_stamp(printer_name, "", 1500, 200)
+            # Save the data in processed_data.csv
+            processed_data = pd.DataFrame({'certificate_number': certificate_number, 'value': value if value else 'None', 'status': True if value else False}, index={'index': [0]})
+            processed_data.to_csv('processed_data.csv', mode='a', index=False, header=False)
 
+            # Do something with the captured image
+            print_stamp(printer_name, value, 1500, 200)
+        else:
+            print("No certificate/Printer found. Exiting...")
+            stamp_df = load_stamp_data('data.csv')
+            value = get_stamp_value_excel(certificate_number.replace('.',''), stamp_df)
+            print(f"Value: {value}")
+
+            # Save the data in processed_data.csv
+            processed_data = pd.DataFrame({'certificate_number': certificate_number, 'value': value if value else 'None', 'status': True if value else False}, index={'index': [0]})
+            processed_data.to_csv('processed_data.csv', mode='a', index=False, header=False)
+            print_stamp(printer_name, "", 1500, 200)
+    except:
+        # check if  captured_photo.jpg exists
+        if os.path.exists('captured_photo.jpg'):
+            os.remove('captured_photo.jpg')
    
 
-if __name__ == "__main__":
-    ''' Pro
-    1. Get IP of connected phone
-    2. Check Available Printer
-    3. Capture Photo stamp
-    4. Scan the barcode, get ref number
-    6. Search against ref number in excel
-    7. Get value from excel and print in stamp
-    '''
-    # import subprocess
-    # from multiprocessing import Process
+# if __name__ == "__main__":
+#     ''' Pro
+#     1. Get IP of connected phone
+#     2. Check Available Printer
+#     3. Capture Photo stamp
+#     4. Scan the barcode, get ref number
+#     6. Search against ref number in excel
+#     7. Get value from excel and print in stamp
+#     '''
+#     # import subprocess
+#     # from multiprocessing import Process
 
-    # if __name__ == "__main__":
-    #     # Start the GUI in a separate process
-    #     gui_process = Process(target=start_gui)
-    #     gui_process.start()
+#     # if __name__ == "__main__":
+#     #     # Start the GUI in a separate process
+#     #     gui_process = Process(target=start_gui)
+#     #     gui_process.start()
 
-    #     # Run runner() 10 times in the main process
-    #     for i in range(10):
-    #         runner()
+#     #     # Run runner() 10 times in the main process
+#     #     for i in range(10):
+#     #         runner()
 
-    #     # Wait for the GUI process to finish (optional)
-    #     gui_process.join()
+#     #     # Wait for the GUI process to finish (optional)
+#     #     gui_process.join()
     

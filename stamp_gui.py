@@ -40,6 +40,7 @@ def run_loop():
     global running
     while running:
         runner()
+        time.sleep(10)
 
 
 def start_runner():
