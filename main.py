@@ -35,8 +35,7 @@ from PIL import Image
 pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
 # OpenAI API Key
-api_key = "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"
-
+api_key = ""
 def get_device_ip():
     """Gets the IP address of the connected device using ADB."""
 
@@ -473,10 +472,10 @@ def runner():
         processed_data.to_csv('processed_data.csv', mode='a', index=False, header=False)
 
         # Do something with the captured image
-        # print_stamp(printer_name, value, 1500, 200)
+        print_stamp(printer_name, value, 1500, 200)
     else:
         print("No certificate/Printer found. Exiting...")
-        # print_stamp(printer_name, "", 1500, 200)
+        print_stamp(printer_name, "", 1500, 200)
 
    
 
