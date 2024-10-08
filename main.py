@@ -435,7 +435,7 @@ def runner():
         
         # 3 Capture photo and get the captured image
         captured_image = capture_photo(ip_address)
-        image_path = 'stamp_paper/E-Stamp.pdf-image-006.jpg'
+        image_path = 'captured_photo.jpg'
         ocr_text = ocr_image(image_path)
         certificate_number = None
         # print(ocr_text)

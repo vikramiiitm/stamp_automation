@@ -73,7 +73,7 @@ def create_ui():
     global start_button  # Declare start_button as global to access it in start_runner
 
     root = tk.Tk()
-    root.title("Processed Data")
+    root.title("Stamp Automation")
 
     # Load initial data from the CSV file
     data = load_csv_data(csv_file)
